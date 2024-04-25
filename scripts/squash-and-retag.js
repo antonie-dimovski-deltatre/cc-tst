@@ -5,6 +5,7 @@ const {
   parentPort,
   workerData,
 } = require("worker_threads");
+const os = require("os");
 
 function runGitCommand(command) {
   try {
@@ -34,22 +35,19 @@ if (isMainThread) {
   console.log(`New squashed commit hash: ${newSquashedCommitHash}`);
 
   // Find the tags pointing to the old commits to be squashed
-  let tagsToMove = runGitCommand(`tag --contains HEAD^`).split("\n");
-  tagsToMove = tagsToMove.filter((tag) => tag); // Filter out any empty tag names
-
+  let tagsToMove = runGitCommand(`tag --contains HEAD^`)
+    .split("\n")
+    .filter((tag) => tag);
   console.log(`Tags to move: ${tagsToMove}`);
+  console.log(`Using ${os.cpus().length} worker threads.`);
 
-  // Process the tags in parallel using worker threads
+  // Create a worker for each tag to move it to the new commit
   tagsToMove.forEach((tag) => {
     const worker = new Worker(__filename, {
       workerData: { tag, newSquashedCommitHash, remote },
     });
-    worker.on("message", (message) => {
-      console.log(message);
-    });
-    worker.on("error", (err) => {
-      console.error(`Worker error: ${err.message}`);
-    });
+    worker.on("message", (message) => console.log(message));
+    worker.on("error", (err) => console.error("Worker error:", err));
     worker.on("exit", (code) => {
       if (code !== 0) {
         console.error(`Worker stopped with exit code ${code}`);
@@ -57,10 +55,14 @@ if (isMainThread) {
     });
   });
 } else {
+  // This block executes in worker threads
   const { tag, newSquashedCommitHash, remote } = workerData;
+
+  console.log(`Worker processing tag: ${tag}`);
   runGitCommand(`tag -d ${tag}`);
   runGitCommand(`push ${remote} :refs/tags/${tag}`);
   runGitCommand(`tag ${tag} ${newSquashedCommitHash}`);
   runGitCommand(`push ${remote} refs/tags/${tag}`);
+
   parentPort.postMessage(`Tag ${tag} moved to commit ${newSquashedCommitHash}`);
 }
