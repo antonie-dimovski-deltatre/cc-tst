@@ -40,7 +40,7 @@ for subdir in */ ; do
     fi
 
     # Form the tag name, replacing spaces and adjusting format
-    tag_name="bar@${safe_subdir_name}@0.0.3"
+    tag_name="bar@${safe_subdir_name}@0.0.6"
 
     # Create a git tag
     git tag "$tag_name"
